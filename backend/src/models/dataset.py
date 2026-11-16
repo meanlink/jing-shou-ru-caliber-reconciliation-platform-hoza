@@ -1,4 +1,4 @@
-from sqlalchemy import String, JSON, Double
+from sqlalchemy import String, JSON, Double, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 from src.config.database import Base
 class Dataset(Base):
@@ -9,3 +9,8 @@ class Dataset(Base):
     records: Mapped[list] = mapped_column(JSON)
     checksum: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[float] = mapped_column(Double)
+    kind: Mapped[str] = mapped_column(String(20), default='manual')
+    month: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    batch_no: Mapped[int | None] = mapped_column(nullable=True)
+    publish_order_id: Mapped[int | None] = mapped_column(nullable=True, unique=True)
+    superseded: Mapped[bool] = mapped_column(Boolean, default=False)

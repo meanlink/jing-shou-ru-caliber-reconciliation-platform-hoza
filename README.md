@@ -4,7 +4,8 @@
 
 ## 模块与业务流程
 数据接入（JSON/CSV、字段验证、批次指纹）→ 参数化分析（异步 Python worker）→ 结果复核（指标、图形、明细、解释、批准）→ 定时分发（本地收件箱、CSV/JSON、SHA256）；另有业务总览和审计轨迹。
-三个贯穿全栈的实体：Dataset 数据批次、Job 分析任务、Report 分发计划；辅助 User、Audit、Delivery。
+累计接账：渠道月内累计来账以月初零为起点相邻相减生成日账，缺日保留待补不摊跨日差额；累计回退整批拒收；发布前核对日账合计等于月末累计，核对通过在单事务内建账并一次性切换可分析批次，旧批次上的未批准试算随之失效。
+三个贯穿全栈的实体：Dataset 数据批次、Job 分析任务、Report 分发计划；辅助 User、Audit、Delivery，以及累计账实体 IngestBatch、CumulativeRecord、DailyAccount、MonthState、PublishOrder。
 
 ## 快速启动
 ```bash
@@ -35,6 +36,13 @@ Role 枚举：admin/analyst/viewer；JobStatus：queued/running/completed/failed
 COMPOSE_PROJECT_NAME=metric-contract；FRONTEND_PORT=18217；BACKEND_PORT=19217；DB_PORT=17717；DB_PASSWORD、JWT_SECRET 见 .env.example；SEED_DEMO 默认 true。共享命名产物卷供后端下载与 worker 写入，数据库/Redis 各持久卷。
 恰好五服务均有健康检查。Redis 队列加 SQL 排队状态兜底；worker 按 next_run 生成本地收件箱文件。周期 60 秒至 30 天。分发结果为批准分析的固定快照；若需新数据重新计算并建立新计划。当前不连接邮件或企业聊天。
 错误响应、请求编号、Redis 每 IP 每分钟 240 次限流、JWT 和数据库操作审计。演示密钥与密码仅供本机模拟；生产部署前配置独立密钥与账号。
+
+## 累计接账与发布
+- `GET /ledger/months`、`GET /ledger/months/{month}`：账期列表与日账、缺日、核对、接账批次、发布单明细。
+- `POST /ledger/months/{month}/ingest`：接入累计来账（补账同一入口）。同渠道同日的再次报数视为更正，会同时改变相邻两日日账；累计回退或同批自然键重复整批拒收并留痕。
+- `POST /ledger/months/{month}/publish-orders`：创建发布单，批次号按账期递增。
+- `POST /ledger/publish-orders/{id}/publish`：执行发布。核对日账合计等于月末累计；通过则在单事务内建账并切换当前可分析批次。中断或失败可重试同一发布单，沿用批次号，幂等不重复建账。
+接账与发布按账期行锁串行化，各自基于完整的已提交版本。发布新批次后旧批次标记 superseded，其上的试算结果拒绝批准；已批准资料保留原值。
 
 ## 数据与验收
 所有数据为固定随机种子生成的模拟业务数据，不能作为实际生产决策证据。项目独立算法、输入边界及业务局限详见 BUSINESS.md。测试与截图统一存放 ../../test-artifacts/gb-1018/，源码不含日志/截图/测试报告。
